@@ -6,7 +6,9 @@ edition = "2021"
 [features]
 default = ["std"]
 
-std = ["libc"]
+std = ["libc", "libc/std"]
+
+libc = ["dep:libc"]
 
 [dependencies]
 cfg-if = "1.0.0"

@@ -2,7 +2,6 @@ use sptr::Strict;
 
 use crate::PackedPtrError;
 
-
 /// The size of a pointer in bytes.
 const PTR_SIZE: usize = core::mem::size_of::<usize>();
 /// The size of a pointer in bits.
@@ -106,9 +105,9 @@ fn get_msb_bits() -> usize {
     })
 }
 
-#[cfg(all(feature = "std", unix))]
+#[cfg(all(feature = "libc", unix))]
 /// Checks if 5-level paging is supported by the kernel.
-/// This is done by trying to map a page at a 48-bit address with MAP_FIXED.
+/// This is done by trying to map a page at a 48-bit address.
 ///
 /// See https://docs.kernel.org/next/x86/x86_64/5level-paging.html
 fn check_5th_lvl_paging() -> bool {
@@ -117,7 +116,7 @@ fn check_5th_lvl_paging() -> bool {
 
     let ret = unsafe {
         libc::mmap(
-            HIGH_ADDR as _,
+            sptr::invalid_mut(HIGH_ADDR),
             2 * PAGE_SIZE,
             libc::PROT_READ | libc::PROT_WRITE,
             libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
@@ -129,6 +128,8 @@ fn check_5th_lvl_paging() -> bool {
     if ret == libc::MAP_FAILED {
         false
     } else {
+        // Per https://github.com/rust-lang/miri/issues/3041, munmap throws a warning when called.
+        // There is no way to suppress this warning, so this comment will have to do.
         unsafe { libc::munmap(ret, 2 * PAGE_SIZE) };
 
         // Check if ret in the 57-bit address space.
@@ -136,10 +137,11 @@ fn check_5th_lvl_paging() -> bool {
     }
 }
 
-#[cfg(all(feature = "std", windows))]
+#[cfg(all(feature = "libc", windows))]
 /// Supposedly Windows supports 5-level paging.
 /// However, I have not been able to find any documentation on how to check for it or even if it is
-/// supported.
+/// supported. The only evidence I have found is this tweet: https://twitter.com/aionescu/status/1142637363840946176
+///
 /// According to https://learn.microsoft.com/en-us/windows/win32/memory/memory-limits-for-windows-releases
 /// 64-bit Windows supports 128 TiB of virtual memory, which means 48-bit addressing & 4-level
 /// paging.
@@ -147,15 +149,15 @@ fn check_5th_lvl_paging() -> bool {
     false
 }
 
-#[cfg(all(feature = "std", not(unix), not(windows)))]
+#[cfg(all(feature = "libc", not(unix), not(windows)))]
 /// Fallback implementation for when the target is not unix.
 /// Assumes that 5-level paging is supported.
 fn check_5th_lvl_paging() -> bool {
     true
 }
 
-#[cfg(not(feature = "std"))]
-/// Fallback implementation for when std lib is not available.
+#[cfg(not(feature = "libc"))]
+/// Fallback implementation for when libc is not available.
 /// Checks if running in kernel mode and if 5-level paging is enabled.
 /// Otherwise assumes that 5-level paging is supported.
 fn check_5th_lvl_paging() -> bool {
