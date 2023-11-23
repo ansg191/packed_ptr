@@ -60,16 +60,14 @@ unsafe impl Packable for () {
         0
     }
 
-    unsafe fn unpack(_: usize) -> Self {
-        ()
-    }
+    unsafe fn unpack(_: usize) -> Self {}
 }
 
 unsafe impl Packable for bool {
     const MAX_BITS: usize = 1;
 
     fn pack(self) -> usize {
-        self as usize
+        usize::from(self)
     }
 
     unsafe fn unpack(value: usize) -> Self {
@@ -79,13 +77,21 @@ unsafe impl Packable for bool {
 
 macro_rules! internal_tuple_unpack {
     ($value:ident, $t:ident) => {
-        let $t = <$t as Packable>::unpack($value);
-        $value >>= <$t as Packable>::MAX_BITS;
+        let $t = {
+            let mask = (1 << <$t as Packable>::MAX_BITS) - 1;
+            let $t = <$t as Packable>::unpack($value & mask);
+            $value >>= <$t as Packable>::MAX_BITS;
+            $t
+        };
     };
     ($value:ident, $t:ident, $($rest:ident),*) => {
         internal_tuple_unpack!($value, $($rest),*);
-        let $t = <$t as Packable>::unpack($value);
-        $value >>= <$t as Packable>::MAX_BITS;
+        let $t = {
+            let mask = (1 << <$t as Packable>::MAX_BITS) - 1;
+            let $t = <$t as Packable>::unpack($value & mask);
+            $value >>= <$t as Packable>::MAX_BITS;
+            $t
+        };
     };
 }
 
@@ -132,12 +138,13 @@ unsafe impl<T: Packable, const N: usize> Packable for [T; N] {
             .fold(0, |acc, x| acc << T::MAX_BITS | x.pack())
     }
 
-    unsafe fn unpack(value: usize) -> Self {
-        let mut value = value;
+    unsafe fn unpack(mut value: usize) -> Self {
+        let mask: usize = (1 << T::MAX_BITS) - 1;
+
         let mut array: MaybeUninit<[T; N]> = MaybeUninit::uninit();
         for i in 1..=N {
-            let ptr = array.as_mut_ptr() as *mut T;
-            ptr.add(N - i).write(T::unpack(value));
+            let ptr = array.as_mut_ptr().cast::<T>();
+            ptr.add(N - i).write(T::unpack(value & mask));
             value >>= T::MAX_BITS;
         }
         array.assume_init()
@@ -148,10 +155,7 @@ unsafe impl<T: Packable> Packable for Option<T> {
     const MAX_BITS: usize = T::MAX_BITS + 1;
 
     fn pack(self) -> usize {
-        match self {
-            Some(x) => x.pack() << 1 | 1,
-            None => 0,
-        }
+        self.map_or(0, |x| x.pack() << 1 | 1)
     }
 
     unsafe fn unpack(value: usize) -> Self {
@@ -199,11 +203,14 @@ mod tests {
         assert_eq!(0u16.pack(), 0);
         assert_eq!(65535u16.pack(), 65535);
         assert_eq!(0u32.pack(), 0);
-        assert_eq!(4294967295u32.pack(), 4294967295);
+        assert_eq!(4_294_967_295_u32.pack(), 4_294_967_295);
         #[cfg(target_pointer_width = "64")]
         assert_eq!(0u64.pack(), 0);
         #[cfg(target_pointer_width = "64")]
-        assert_eq!(18446744073709551615u64.pack(), 18446744073709551615);
+        assert_eq!(
+            18_446_744_073_709_551_615_u64.pack(),
+            18_446_744_073_709_551_615
+        );
 
         unsafe {
             assert_eq!(0u8, Packable::unpack(0));
@@ -211,13 +218,13 @@ mod tests {
             assert_eq!(0u16, Packable::unpack(0));
             assert_eq!(65535u16, Packable::unpack(65535));
             assert_eq!(0u32, Packable::unpack(0));
-            assert_eq!(4294967295u32, Packable::unpack(4294967295));
+            assert_eq!(4_294_967_295_u32, Packable::unpack(4_294_967_295));
             #[cfg(target_pointer_width = "64")]
             assert_eq!(0u64, Packable::unpack(0));
             #[cfg(target_pointer_width = "64")]
             assert_eq!(
-                18446744073709551615u64,
-                Packable::unpack(18446744073709551615)
+                18_446_744_073_709_551_615_u64,
+                Packable::unpack(18_446_744_073_709_551_615)
             );
         }
     }
@@ -226,9 +233,6 @@ mod tests {
     fn zst() {
         assert_eq!(<() as Packable>::MAX_BITS, 0);
         assert_eq!(().pack(), 0);
-        unsafe {
-            assert_eq!((), Packable::unpack(0));
-        }
     }
 
     #[test]
@@ -237,8 +241,8 @@ mod tests {
         assert_eq!(false.pack(), 0);
         assert_eq!(true.pack(), 1);
         unsafe {
-            assert_eq!(false, Packable::unpack(0));
-            assert_eq!(true, Packable::unpack(1));
+            assert!(!<bool as Packable>::unpack(0));
+            assert!(<bool as Packable>::unpack(1));
         }
     }
 
@@ -250,12 +254,14 @@ mod tests {
         assert_eq!((false, 255u8).pack(), 0x0ff);
         assert_eq!((true, 0u8).pack(), 0x100);
         assert_eq!((true, 255u8).pack(), 0x1ff);
+        assert_eq!((true, false).pack(), 0b10);
 
         unsafe {
             assert_eq!((false, 0u8), Packable::unpack(0x000));
             assert_eq!((false, 255u8), Packable::unpack(0x0ff));
             assert_eq!((true, 0u8), Packable::unpack(0x100));
             assert_eq!((true, 255u8), Packable::unpack(0x1ff));
+            assert_eq!((true, false), Packable::unpack(0b10));
         }
     }
 
@@ -265,24 +271,29 @@ mod tests {
         assert_eq!(<[u8; 4] as Packable>::MAX_BITS, 32);
         assert_eq!(<[bool; 4] as Packable>::MAX_BITS, 4);
 
-        assert_eq!([0u8, 0, 0].pack(), 0x000000);
-        assert_eq!([0u8, 0, 255].pack(), 0x0000ff);
-        assert_eq!([0u8, 255, 0].pack(), 0x00ff00);
-        assert_eq!([0u8, 255, 255].pack(), 0x00ffff);
-        assert_eq!([255u8, 0, 0].pack(), 0xff0000);
-        assert_eq!([255u8, 0, 255].pack(), 0xff00ff);
-        assert_eq!([255u8, 255, 0].pack(), 0xffff00);
-        assert_eq!([255u8, 255, 255].pack(), 0xffffff);
+        assert_eq!([0u8, 0, 0].pack(), 0x0000_0000);
+        assert_eq!([0u8, 0, 255].pack(), 0x0000_00ff);
+        assert_eq!([0u8, 255, 0].pack(), 0x0000_ff00);
+        assert_eq!([0u8, 255, 255].pack(), 0x0000_ffff);
+        assert_eq!([255u8, 0, 0].pack(), 0x00ff_0000);
+        assert_eq!([255u8, 0, 255].pack(), 0x00ff_00ff);
+        assert_eq!([255u8, 255, 0].pack(), 0x00ff_ff00);
+        assert_eq!([255u8, 255, 255].pack(), 0x00ff_ffff);
+        assert_eq!([true, false].pack(), 0b10);
 
         unsafe {
-            assert_eq!([0u8, 0, 0], <[u8; 3] as Packable>::unpack(0x000000));
-            assert_eq!([0u8, 0, 255], <[u8; 3] as Packable>::unpack(0x0000ff));
-            assert_eq!([0u8, 255, 0], <[u8; 3] as Packable>::unpack(0x00ff00));
-            assert_eq!([0u8, 255, 255], <[u8; 3] as Packable>::unpack(0x00ffff));
-            assert_eq!([255u8, 0, 0], <[u8; 3] as Packable>::unpack(0xff0000));
-            assert_eq!([255u8, 0, 255], <[u8; 3] as Packable>::unpack(0xff00ff));
-            assert_eq!([255u8, 255, 0], <[u8; 3] as Packable>::unpack(0xffff00));
-            assert_eq!([255u8, 255, 255], <[u8; 3] as Packable>::unpack(0xffffff));
+            assert_eq!([0u8, 0, 0], <[u8; 3] as Packable>::unpack(0x0000_0000));
+            assert_eq!([0u8, 0, 255], <[u8; 3] as Packable>::unpack(0x0000_00ff));
+            assert_eq!([0u8, 255, 0], <[u8; 3] as Packable>::unpack(0x0000_ff00));
+            assert_eq!([0u8, 255, 255], <[u8; 3] as Packable>::unpack(0x0000_ffff));
+            assert_eq!([255u8, 0, 0], <[u8; 3] as Packable>::unpack(0x00ff_0000));
+            assert_eq!([255u8, 0, 255], <[u8; 3] as Packable>::unpack(0x00ff_00ff));
+            assert_eq!([255u8, 255, 0], <[u8; 3] as Packable>::unpack(0x00ff_ff00));
+            assert_eq!(
+                [255u8, 255, 255],
+                <[u8; 3] as Packable>::unpack(0x00ff_ffff)
+            );
+            assert_eq!([true, false], <[bool; 2] as Packable>::unpack(0b10));
         }
     }
 

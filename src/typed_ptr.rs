@@ -60,7 +60,7 @@ impl<T, D: Packable> TypedPackedPtr<T, D> {
     /// use packed_ptr::TypedPackedPtr;
     ///
     /// let data = 0xdeadbeefu32;
-    /// let packed = [1u8, 0xFF];
+    /// let packed = [true, false];
     /// let ptr = TypedPackedPtr::new(&data, packed).unwrap();
     /// assert_eq!(data, unsafe { *ptr.ptr() });
     /// assert_eq!(packed, ptr.data());
@@ -100,16 +100,19 @@ impl<T, D: Packable> TypedPackedPtr<T, D> {
     }
 
     /// Returns the raw pointer value of the Packed Pointer.
+    #[must_use]
     pub fn ptr(self) -> *const T {
         self.get().0
     }
 
     /// Returns the packed data value of the Packed Pointer.
+    #[must_use]
     pub fn data(self) -> D {
         self.get().1
     }
 
     /// Returns a tuple containing the raw pointer value and the packed data value.
+    #[must_use]
     pub fn get(self) -> (*const T, D) {
         // SAFETY: The data is always valid because it is packed in `new`.
         (self.0.ptr(), unsafe { D::unpack(self.0.data()) })
@@ -149,7 +152,7 @@ impl<T, D: Packable + Eq> Eq for TypedPackedPtr<T, D> {}
 
 impl<T, D: Packable + Hash> Hash for TypedPackedPtr<T, D> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.get().hash(state)
+        self.get().hash(state);
     }
 }
 
@@ -188,7 +191,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let data = 0xdeadbeefu32;
+        let data = 0xdead_beef_u32;
         let packed = 255u8;
 
         let ptr = TypedPackedPtr::new(&data, packed).unwrap();
@@ -198,8 +201,8 @@ mod tests {
     }
 
     #[test]
-    pub fn new() {
-        let data = 0xdeadbeefu32;
+    fn new() {
+        let data = 0xdead_beef_u32;
 
         let packed = 5u32;
         let overflow = TypedPackedPtr::new(&data, packed);
@@ -211,6 +214,15 @@ mod tests {
 
         let packed = 5u8;
         let ok = TypedPackedPtr::new(&data, packed);
-        assert!(matches!(ok, Ok(_)));
+        assert!(ok.is_ok());
+    }
+
+    #[test]
+    fn array() {
+        let data = 0xdead_beef_u32;
+        let packed = [true, false];
+        let ptr = TypedPackedPtr::new(&data, packed).unwrap();
+        assert_eq!(data, unsafe { *ptr.ptr() });
+        assert_eq!(packed, ptr.data());
     }
 }

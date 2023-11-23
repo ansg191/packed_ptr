@@ -10,6 +10,11 @@ use crate::{error::PackedPtrError, Packable, TypedPackedPtr};
 pub struct PackedRef<'a, T, D: Packable>(TypedPackedPtr<T, D>, PhantomData<&'a T>);
 
 impl<'a, T, D: Packable> PackedRef<'a, T, D> {
+    /// Creates a new [`PackedRef`] from a reference and some data.
+    ///
+    /// # Errors
+    ///
+    /// * [`PackedPtrError::DataOverflow`] if the data is too large to fit in the pointer.
     pub fn new(ptr: &'a T, data: D) -> Result<Self, PackedPtrError> {
         Ok(Self(TypedPackedPtr::new(ptr, data)?, PhantomData))
     }
@@ -19,10 +24,12 @@ impl<'a, T, D: Packable> PackedRef<'a, T, D> {
         unsafe { &*self.0.ptr() }
     }
 
+    #[must_use]
     pub fn data(self) -> D {
         self.0.data()
     }
 
+    #[must_use]
     pub fn get(self) -> (&'a T, D) {
         (self.r#ref(), self.0.data())
     }
@@ -65,7 +72,7 @@ mod tests {
 
     #[test]
     fn new() {
-        let data = 0xdeadbeefu32;
+        let data = 0xdead_beef_u32;
         let packed = 255u8;
 
         let ok = PackedRef::new(&data, packed).unwrap();
