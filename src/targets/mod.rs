@@ -17,6 +17,8 @@ impl<T> PackedPtr<T> {
     /// The total number of free bits we can store in a pointer.
     ///
     /// Data stored in the pointer must be less than `2^Self::BITS`.
+    #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
     pub fn bits() -> usize {
         imp::PackedPtr::<T>::bits()
     }
@@ -86,6 +88,7 @@ impl<T> PackedPtr<T> {
     /// Returns a tuple containing a pointer to the data and the length of the data.
     ///
     /// The `*const T` is a raw pointer to the data stored in the structure, while the `usize` represents the length of the data.
+    #[must_use]
     pub fn get(self) -> (*const T, usize) {
         self.0.get()
     }
@@ -104,6 +107,7 @@ impl<T> PackedPtr<T> {
     /// let ptr = PackedPtr::new(&data, 255).unwrap();
     /// assert_eq!(data, unsafe { *ptr.ptr() });
     /// ```
+    #[must_use]
     pub fn ptr(self) -> *const T {
         self.0.ptr()
     }
@@ -125,6 +129,7 @@ impl<T> PackedPtr<T> {
     /// let ptr = PackedPtr::new(&value, 255).unwrap();
     /// assert_eq!(255, ptr.data());
     /// ```
+    #[must_use]
     pub fn data(self) -> usize {
         self.0.data()
     }

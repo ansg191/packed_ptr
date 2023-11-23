@@ -9,7 +9,7 @@ use crate::PackedPtrError;
 /// specific amount of additional data.
 ///
 /// On `ARMv8` the pointer will contain 16 + `log2(align_of::<T>)` bits of additional data:
-/// - 16 bits are the most significant bits of the pointer. ARMv8 requires that these bits are
+/// - 16 bits are the most significant bits of the pointer. `ARMv8` requires that these bits are
 ///   either all 0 or all 1. On Windows, linux, and macOS the OS reserves all 1s for the kernel.
 /// - `log2(align_of::<T>)` bits are the least significant bits of the pointer. Since pointers to
 ///   various types must be aligned to a specific number of bytes, we can use the lsb to store some
@@ -54,7 +54,7 @@ impl<T> PackedPtr<T> {
     /// Data stored in the pointer must be less than `2^Self::BITS`.
     pub const BITS: usize = Self::MSB_BITS + Self::ALIGN_BITS;
 
-    pub fn bits() -> usize {
+    pub const fn bits() -> usize {
         Self::BITS
     }
 }

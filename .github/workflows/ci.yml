@@ -11,8 +11,9 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
-  stable:
+  test:
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -26,6 +27,62 @@ jobs:
     - uses: taiki-e/install-action@cargo-hack
     - name: Run tests
       run: cargo hack test --feature-powerset
+
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          - x86_64-unknown-linux-gnu
+          - riscv64gc-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
+    - uses: taiki-e/install-action@cargo-hack
+    - name: Build
+      run: cargo hack build --feature-powerset --target ${{ matrix.target }}
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
+    - uses: taiki-e/install-action@cargo-hack
+    - name: Build
+      run: cargo hack build --feature-powerset --target ${{ matrix.target }}
+
+  build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - i686-pc-windows-msvc
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+          - i686-pc-windows-gnu
+          - x86_64-pc-windows-gnu
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
+    - uses: taiki-e/install-action@cargo-hack
+    - name: Build
+      run: cargo hack build --feature-powerset --target ${{ matrix.target }}
 
   clippy:
     runs-on: ubuntu-latest

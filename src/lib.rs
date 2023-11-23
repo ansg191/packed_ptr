@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::module_name_repetitions)]
 
 mod error;
 mod packable;

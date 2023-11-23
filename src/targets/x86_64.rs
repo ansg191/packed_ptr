@@ -109,7 +109,7 @@ fn get_msb_bits() -> usize {
 /// Checks if 5-level paging is supported by the kernel.
 /// This is done by trying to map a page at a 48-bit address.
 ///
-/// See https://docs.kernel.org/next/x86/x86_64/5level-paging.html
+/// See <https://docs.kernel.org/next/x86/x86_64/5level-paging.html>
 fn check_5th_lvl_paging() -> bool {
     const HIGH_ADDR: usize = 1 << 48;
     const PAGE_SIZE: usize = 4 << 10;
@@ -140,9 +140,9 @@ fn check_5th_lvl_paging() -> bool {
 #[cfg(all(feature = "libc", windows))]
 /// Supposedly Windows supports 5-level paging.
 /// However, I have not been able to find any documentation on how to check for it or even if it is
-/// supported. The only evidence I have found is this tweet: https://twitter.com/aionescu/status/1142637363840946176
+/// supported. The only evidence I have found is this tweet: <https://twitter.com/aionescu/status/1142637363840946176>
 ///
-/// According to https://learn.microsoft.com/en-us/windows/win32/memory/memory-limits-for-windows-releases
+/// According to <https://learn.microsoft.com/en-us/windows/win32/memory/memory-limits-for-windows-releases>
 /// 64-bit Windows supports 128 TiB of virtual memory, which means 48-bit addressing & 4-level
 /// paging.
 fn check_5th_lvl_paging() -> bool {
