@@ -145,37 +145,21 @@ fn check_5th_lvl_paging() -> bool {
 /// According to <https://learn.microsoft.com/en-us/windows/win32/memory/memory-limits-for-windows-releases>
 /// 64-bit Windows supports 128 TiB of virtual memory, which means 48-bit addressing & 4-level
 /// paging.
-fn check_5th_lvl_paging() -> bool {
+const fn check_5th_lvl_paging() -> bool {
     false
 }
 
 #[cfg(all(feature = "libc", not(unix), not(windows)))]
 /// Fallback implementation for when the target is not unix.
 /// Assumes that 5-level paging is supported.
-fn check_5th_lvl_paging() -> bool {
+const fn check_5th_lvl_paging() -> bool {
     true
 }
 
 #[cfg(not(feature = "libc"))]
 /// Fallback implementation for when libc is not available.
-/// Checks if running in kernel mode and if 5-level paging is enabled.
-/// Otherwise assumes that 5-level paging is supported.
-fn check_5th_lvl_paging() -> bool {
-    use x86_64::{
-        registers::{
-            control::{Cr4, Cr4Flags},
-            segmentation::{Segment, CS},
-        },
-        PrivilegeLevel,
-    };
-
-    // Check if running in kernel mode.
-    if CS::get_reg().rpl() == PrivilegeLevel::Ring0 {
-        // Check if 5-level paging is enabled.
-        let cr4 = Cr4::read();
-        cr4.contains(Cr4Flags::L5_PAGING)
-    } else {
-        // Assume 5-level paging is supported.
-        true
-    }
+/// Assumes that 5-level paging is supported.
+/// This is not a good assumption, but it is the safest one.
+const fn check_5th_lvl_paging() -> bool {
+    true
 }
