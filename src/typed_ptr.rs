@@ -1,4 +1,5 @@
 use core::{
+    convert::TryFrom,
     fmt::{Debug, Formatter, Pointer},
     hash::Hash,
     marker::PhantomData,

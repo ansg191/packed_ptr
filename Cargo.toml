@@ -1,7 +1,14 @@
 [package]
 name = "packed_ptr"
+description = "A configurable & generic tagged pointer implementation in Rust"
+authors = ["Anshul Gupta <ansg191@anshulg.com>"]
 version = "0.1.0"
-edition = "2021"
+repository = "https://github.com/ansg191/packed_ptr"
+license = "MIT"
+edition = "2018"
+rust-version = "1.51.0"
+keywords = ["tag", "pointer"]
+categories = ["data-structures", "no-std", "no-std::no-alloc"]
 
 [features]
 default = []

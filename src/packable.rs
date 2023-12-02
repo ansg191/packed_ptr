@@ -134,8 +134,7 @@ unsafe impl<T: Packable, const N: usize> Packable for [T; N] {
     const MAX_BITS: usize = T::MAX_BITS * N;
 
     fn pack(self) -> usize {
-        self.into_iter()
-            .fold(0, |acc, x| acc << T::MAX_BITS | x.pack())
+        IntoIterator::into_iter(&self).fold(0, |acc, x| acc << T::MAX_BITS | x.pack())
     }
 
     unsafe fn unpack(mut value: usize) -> Self {
