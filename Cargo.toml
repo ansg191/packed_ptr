@@ -7,6 +7,7 @@ repository = "https://github.com/ansg191/packed_ptr"
 license = "MIT"
 edition = "2018"
 rust-version = "1.51.0"
+readme = "README.md"
 keywords = ["tag", "pointer"]
 categories = ["data-structures", "no-std", "no-std::no-alloc"]
 
