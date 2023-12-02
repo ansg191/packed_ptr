@@ -9,6 +9,26 @@ use crate::{
 
 const PTR_SIZE_BITS: usize = size_of::<*const ()>() * 8;
 
+/// A packed pointer that wraps a raw pointer to a specified type with additional data packed into
+/// the pointer itself.
+///
+/// A [`PackedPtr`] will always be the same size as a raw pointer, but can contain a configuration
+/// specific amount of data packed into the pointer itself.
+///
+/// # Safety
+///
+/// Creating a `PackedPtr` instance requires a raw pointer, which can be obtained from other safe or
+/// unsafe operations. It's important to ensure the safety of the source of the raw pointer when
+/// using `PackedPtr`, as it does not provide additional checks or guarantees like Rust's reference
+/// lifetimes do.
+///
+/// This struct does not enforce any guarantees about the validity or ownership of the pointed-to
+/// data. It is the responsibility of the user to ensure that the underlying data remains valid and
+/// accessible for the lifetime of this pointer.
+///
+/// With that being said, `PackedPtr` does provide some safety requirements:
+/// - The pointer must be aligned to the alignment of `T`.
+/// - The data must be less than `2^Self::BITS`.
 #[repr(transparent)]
 pub struct PackedPtr<T, C: PtrCfg>(*const T, PhantomData<C>);
 
@@ -94,6 +114,9 @@ impl<T, C: PtrCfg> PackedPtr<T, C> {
     /// address.
     ///
     /// Passing data that is too large will cause the data to be truncated to fit in the pointer.
+    ///
+    /// Passing a pointer that is not compatible with the configuration will cause the pointer to be
+    /// corrupted, leading to UB.
     pub unsafe fn new_unchecked(ptr: *const T, data: usize) -> Self {
         let trunc_data = data & ((1 << Self::bits()) - 1);
         let upper = (trunc_data << (PTR_SIZE_BITS - Self::bits())) & C::msb_bits_mask();

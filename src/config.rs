@@ -1,3 +1,16 @@
+//! Configuration for [`PackedPtr`](crate::PackedPtr).
+//!
+//! All configurations must implement the [`PtrCfg`] trait.
+//! This trait is sealed and cannot be implemented outside of this crate.
+//!
+//! There are 2 types of `PtrCfg`s that are available for all platforms:
+//! * [`None`]: No data can be packed into the pointer.
+//! * [`AlignOnly`]: Only the alignment of the pointer can be packed into the pointer.
+//!
+//! There are also platform-specific `PtrCfg`s that are available on some platforms.
+//! For example on `x86_64`, there is [`Level4Paging`] & [`Level5Paging`] for 48-bit & 57-bit
+//! addresses respectively.
+
 use core::mem::{align_of, size_of};
 
 use sptr::Strict;

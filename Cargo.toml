@@ -4,6 +4,7 @@ description = "A configurable & generic tagged pointer implementation in Rust"
 authors = ["Anshul Gupta <ansg191@anshulg.com>"]
 version = "0.1.0"
 repository = "https://github.com/ansg191/packed_ptr"
+documentation = "https://docs.rs/packed_ptr"
 license = "MIT"
 edition = "2018"
 rust-version = "1.51.0"
