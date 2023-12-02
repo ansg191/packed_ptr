@@ -4,7 +4,7 @@ use core::{
     marker::PhantomData,
 };
 
-use crate::{error::PackedPtrError, Packable, PackedPtr};
+use crate::{config::PtrCfg, error::PackedPtrError, Packable, PackedPtr};
 
 /// A [`PackedPtr`] with a type-safe packed data value.
 ///
@@ -34,9 +34,9 @@ use crate::{error::PackedPtrError, Packable, PackedPtr};
 /// - Data packed into the pointer must be created from [`Packable::pack`].
 /// - Data unpacked from the pointer must be retrieved via [`Packable::unpack`].
 #[repr(transparent)]
-pub struct TypedPackedPtr<T, D: Packable>(PackedPtr<T>, PhantomData<D>);
+pub struct TypedPackedPtr<T, C: PtrCfg, D: Packable>(PackedPtr<T, C>, PhantomData<D>);
 
-impl<T, D: Packable> TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable> TypedPackedPtr<T, C, D> {
     /// Create a new `TypedPackedPtr` with the given pointer and data.
     ///
     /// # Arguments
@@ -53,25 +53,27 @@ impl<T, D: Packable> TypedPackedPtr<T, D> {
     ///
     /// * [`PackedPtrError::UnalignedAddress`]: The pointer is not aligned.
     /// * [`PackedPtrError::DataOverflow`]: The data will not fit in the pointer.
+    /// * [`PackedPtrError::UnsafeConfig`]: The pointer is not compatible with the configuration.
     ///
     /// # Examples
     ///
     /// ```
     /// use packed_ptr::TypedPackedPtr;
+    /// use packed_ptr::config::AlignOnly;
     ///
     /// let data = 0xdeadbeefu32;
     /// let packed = [true, false];
-    /// let ptr = TypedPackedPtr::new(&data, packed).unwrap();
+    /// let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
     /// assert_eq!(data, unsafe { *ptr.ptr() });
     /// assert_eq!(packed, ptr.data());
     /// ```
-    pub fn new(ptr: *const T, data: D) -> Result<Self, PackedPtrError> {
-        if <D as Packable>::MAX_BITS > PackedPtr::<T>::bits() {
+    pub fn new(ptr: *const T, data: D, cfg: C) -> Result<Self, PackedPtrError> {
+        if <D as Packable>::MAX_BITS > PackedPtr::<T, C>::bits() {
             return Err(PackedPtrError::DataOverflow);
         }
 
         let data = data.pack();
-        let ptr = PackedPtr::new(ptr, data)?;
+        let ptr = PackedPtr::new(ptr, data, cfg)?;
         Ok(Self(ptr, PhantomData))
     }
 
@@ -80,10 +82,13 @@ impl<T, D: Packable> TypedPackedPtr<T, D> {
     /// # Safety
     ///
     /// This function is unsafe because the caller assumes the responsibility of ensuring that the
-    /// provided `ptr` and `data` are valid.
+    /// provided `ptr` and `data` are valid and that they are compatible with the configuration.
     ///
     /// If the provided `ptr` is a unaligned, or if the `data` is too big to fit in the pointer,
     /// undefined behavior may occur.
+    ///
+    /// If the `ptr` is incompatible with the configuration, then the `ptr` may be corrupted,
+    /// resulting in UB.
     ///
     /// # Arguments
     ///
@@ -119,15 +124,15 @@ impl<T, D: Packable> TypedPackedPtr<T, D> {
     }
 }
 
-impl<T, D: Packable> Clone for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable> Clone for TypedPackedPtr<T, C, D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T, D: Packable> Copy for TypedPackedPtr<T, D> {}
+impl<T, C: PtrCfg, D: Packable> Copy for TypedPackedPtr<T, C, D> {}
 
-impl<T, D: Packable + Debug> Debug for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable + Debug> Debug for TypedPackedPtr<T, C, D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("TypedPackedPtr")
             .field(&self.ptr())
@@ -136,51 +141,44 @@ impl<T, D: Packable + Debug> Debug for TypedPackedPtr<T, D> {
     }
 }
 
-impl<T, D: Packable> Pointer for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable> Pointer for TypedPackedPtr<T, C, D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         Pointer::fmt(&self.ptr(), f)
     }
 }
 
-impl<T, D: Packable + PartialEq> PartialEq for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable + PartialEq> PartialEq for TypedPackedPtr<T, C, D> {
     fn eq(&self, other: &Self) -> bool {
         self.get() == other.get()
     }
 }
 
-impl<T, D: Packable + Eq> Eq for TypedPackedPtr<T, D> {}
+impl<T, C: PtrCfg, D: Packable + Eq> Eq for TypedPackedPtr<T, C, D> {}
 
-impl<T, D: Packable + Hash> Hash for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable + Hash> Hash for TypedPackedPtr<T, C, D> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.get().hash(state);
     }
 }
 
-impl<T, D: Packable + Default> From<&T> for TypedPackedPtr<T, D> {
-    fn from(value: &T) -> Self {
-        // SAFETY: references are always aligned.
-        unsafe { Self::new_unchecked(value, D::default()) }
-    }
-}
-
-impl<T, D: Packable + Default> TryFrom<*const T> for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable + Default> TryFrom<*const T> for TypedPackedPtr<T, C, D> {
     type Error = PackedPtrError;
 
     fn try_from(value: *const T) -> Result<Self, Self::Error> {
-        Self::new(value, D::default())
+        Self::new(value, D::default(), C::default())
     }
 }
 
-impl<T, D: Packable> TryFrom<(*const T, D)> for TypedPackedPtr<T, D> {
+impl<T, C: PtrCfg, D: Packable> TryFrom<(*const T, D)> for TypedPackedPtr<T, C, D> {
     type Error = PackedPtrError;
 
     fn try_from(value: (*const T, D)) -> Result<Self, Self::Error> {
-        Self::new(value.0, value.1)
+        Self::new(value.0, value.1, C::default())
     }
 }
 
-impl<T, D: Packable> From<TypedPackedPtr<T, D>> for *const T {
-    fn from(value: TypedPackedPtr<T, D>) -> Self {
+impl<T, C: PtrCfg, D: Packable> From<TypedPackedPtr<T, C, D>> for *const T {
+    fn from(value: TypedPackedPtr<T, C, D>) -> Self {
         value.ptr()
     }
 }
@@ -188,13 +186,14 @@ impl<T, D: Packable> From<TypedPackedPtr<T, D>> for *const T {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::AlignOnly;
 
     #[test]
     fn round_trip() {
         let data = 0xdead_beef_u32;
-        let packed = 255u8;
+        let packed = (true, false);
 
-        let ptr = TypedPackedPtr::new(&data, packed).unwrap();
+        let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
 
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
@@ -205,15 +204,15 @@ mod tests {
         let data = 0xdead_beef_u32;
 
         let packed = 5u32;
-        let overflow = TypedPackedPtr::new(&data, packed);
+        let overflow = TypedPackedPtr::new(&data, packed, AlignOnly);
         assert!(overflow.is_err());
         assert!(matches!(
             overflow.unwrap_err(),
             PackedPtrError::DataOverflow
         ));
 
-        let packed = 5u8;
-        let ok = TypedPackedPtr::new(&data, packed);
+        let packed = true;
+        let ok = TypedPackedPtr::new(&data, packed, AlignOnly);
         assert!(ok.is_ok());
     }
 
@@ -221,7 +220,7 @@ mod tests {
     fn array() {
         let data = 0xdead_beef_u32;
         let packed = [true, false];
-        let ptr = TypedPackedPtr::new(&data, packed).unwrap();
+        let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
     }

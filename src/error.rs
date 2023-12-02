@@ -10,6 +10,9 @@ pub enum PackedPtrError {
     UnalignedAddress,
     /// The data is too large to pack into the pointer.
     DataOverflow,
+    /// The provided [`PtrCfg`](crate::config::PtrCfg) would result in UB if used with
+    /// provided pointer.
+    UnsafeConfig,
 }
 
 impl Display for PackedPtrError {
@@ -17,6 +20,7 @@ impl Display for PackedPtrError {
         match *self {
             Self::UnalignedAddress => f.write_str("unaligned address"),
             Self::DataOverflow => f.write_str("data too large"),
+            Self::UnsafeConfig => f.write_str("unsafe config"),
         }
     }
 }
