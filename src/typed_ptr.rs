@@ -123,6 +123,17 @@ impl<T, C: PtrCfg, D: Packable> TypedPackedPtr<T, C, D> {
         // SAFETY: The data is always valid because it is packed in `new`.
         (self.0.ptr(), unsafe { D::unpack(self.0.data()) })
     }
+
+    /// Sets the packed data value of the pointer.
+    ///
+    /// # Arguments
+    ///
+    /// * `data`: The data to pack into the pointer.
+    pub fn set_data(&mut self, data: D) {
+        // SAFETY: ptr & config are valid since unchanged. Data is valid since type was checked in
+        // `new`.
+        *self = unsafe { Self::new_unchecked(self.ptr(), data) };
+    }
 }
 
 impl<T, C: PtrCfg, D: Packable> Clone for TypedPackedPtr<T, C, D> {
@@ -224,5 +235,20 @@ mod tests {
         let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
+    }
+
+    #[test]
+    fn set_data() {
+        let data = 0xdead_beef_u32;
+        let packed = (true, false);
+        let mut ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
+        assert_eq!(data, unsafe { *ptr.ptr() });
+        assert_eq!(packed, ptr.data());
+
+        let new_packed = (false, true);
+        ptr.set_data(new_packed);
+
+        assert_eq!(data, unsafe { *ptr.ptr() });
+        assert_eq!(new_packed, ptr.data());
     }
 }

@@ -23,19 +23,31 @@ impl<'a, T, C: PtrCfg, D: Packable> PackedRef<'a, T, C, D> {
         Ok(Self(TypedPackedPtr::new(ptr, data, cfg)?, PhantomData))
     }
 
+    /// Returns the reference to the data.
     fn r#ref(self) -> &'a T {
         // SAFETY: the pointer is always valid per type invariant.
         unsafe { &*self.0.ptr() }
     }
 
+    /// Returns the packed data value of the Packed Pointer.
     #[must_use]
     pub fn data(self) -> D {
         self.0.data()
     }
 
+    /// Returns a tuple containing the reference and the packed data value.
     #[must_use]
     pub fn get(self) -> (&'a T, D) {
         (self.r#ref(), self.0.data())
+    }
+
+    /// Sets the packed data value of the pointer.
+    ///
+    /// # Arguments
+    ///
+    /// * `data`: The data to pack into the pointer.
+    pub fn set_data(&mut self, data: D) {
+        self.0.set_data(data);
     }
 }
 
@@ -94,5 +106,24 @@ mod tests {
             overflow.unwrap_err(),
             PackedPtrError::DataOverflow
         ));
+    }
+
+    #[test]
+    fn set_data() {
+        let data = 0xdead_beef_u32;
+        let packed = (true, false);
+
+        let mut ref1 = PackedRef::new(&data, packed, AlignOnly).unwrap();
+
+        assert_eq!(*ref1, data);
+        assert_eq!(ref1.data(), packed);
+        assert_eq!(ref1.get(), (&data, packed));
+
+        let new_packed = (false, true);
+        ref1.set_data(new_packed);
+
+        assert_eq!(*ref1, data);
+        assert_eq!(ref1.data(), new_packed);
+        assert_eq!(ref1.get(), (&data, new_packed));
     }
 }
