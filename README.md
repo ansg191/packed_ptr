@@ -21,7 +21,7 @@ assert_eq!(1, ptr.data());
 
 ### Platform Specific Usage
 
-On x86_64, using level 4 paging, the 16 most significant bits are unused.
+On `x86_64`, using level 4 paging, the 16 most significant bits are unused.
 Therefore, we can pack 18 bits of data into a `*const u32`.
 ```rust
 use packed_ptr::PackedPtr;
@@ -44,7 +44,7 @@ use packed_ptr::config::AlignOnly;
 
 let data = 0xdeadbeefu32;
 let packed = (true, false);
-let ptr = TypedPackedPtr::new(&data, pacekd, AlignOnly).unwrap();
+let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
 assert_eq!(data, unsafe { *ptr.ptr() });
 assert_eq!(packed, ptr.data());
 ```

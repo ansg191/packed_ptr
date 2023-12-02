@@ -6,6 +6,9 @@ use core::{
 
 use crate::{config::PtrCfg, error::PackedPtrError, Packable, TypedPackedPtr};
 
+/// A type safe reference to a packed pointer.
+///
+/// Equivalent to `&T` where `T` is the type of the pointer.
 #[repr(transparent)]
 pub struct PackedRef<'a, T, C: PtrCfg, D: Packable>(TypedPackedPtr<T, C, D>, PhantomData<&'a T>);
 
