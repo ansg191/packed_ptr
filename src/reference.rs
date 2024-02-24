@@ -23,6 +23,32 @@ impl<'a, T, C: PtrCfg, D: Packable> PackedRef<'a, T, C, D> {
         Ok(Self(TypedPackedPtr::new(ptr, data, cfg)?, PhantomData))
     }
 
+    /// Creates a new [`PackedRef`] from a reference and some data without performing any safety
+    /// checks.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because the caller assumes the responsibility of ensuring that the
+    /// provided `ptr` and `data` are valid and that they are compatible with the configuration.
+    ///
+    /// References are always aligned, therefore `ptr` should always be valid, but if the `ptr` of
+    /// the system is incompatible with the configuration, then the reference will be corrupted,
+    /// resulting in UB.
+    ///
+    /// Also, if the `data` is too big to fit in the pointer, undefined behavior may occur.
+    ///
+    /// # Arguments
+    ///
+    /// - `ptr`: A reference to a `T`
+    /// - `data`: The data to be packed into the pointer.
+    ///
+    /// # Returns
+    ///
+    /// A new [`PackedRef`] with the given `ptr` and `data`.
+    pub unsafe fn new_unchecked(ptr: &'a T, data: D) -> Self {
+        Self(TypedPackedPtr::new_unchecked(ptr, data), PhantomData)
+    }
+
     /// Returns the reference to the data.
     fn r#ref(self) -> &'a T {
         // SAFETY: the pointer is always valid per type invariant.
