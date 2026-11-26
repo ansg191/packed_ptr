@@ -1,0 +1,54 @@
+name: Proofs
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  # Regenerate proofs/PackedPtr/Code from src/bits.rs and fail on any diff.
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: taiki-e/install-action@just
+    - name: Install aeneas
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        rev="$(jq -r '.packages[] | select(.name == "aeneas") | .rev' proofs/lake-manifest.json)"
+        tag="$(gh api --paginate 'repos/AeneasVerif/aeneas/releases?per_page=100' --jq '.[].tag_name' \
+          | awk -v rev="$rev" '!found { n = split($0, p, "-"); if (index(rev, p[n]) == 1) { print; found = 1 } }')"
+        if [ -z "$tag" ]; then
+          echo "::error::No aeneas release was built from $rev; pin proofs/lakefile.lean to a commit that has one"
+          exit 1
+        fi
+        echo "Using aeneas release $tag"
+        gh release download "$tag" --repo AeneasVerif/aeneas --pattern aeneas-linux-x86_64.tar.gz --dir "$RUNNER_TEMP"
+        mkdir "$RUNNER_TEMP/aeneas"
+        tar -xzf "$RUNNER_TEMP/aeneas-linux-x86_64.tar.gz" -C "$RUNNER_TEMP/aeneas" --exclude=backends
+        echo "CHARON=$RUNNER_TEMP/aeneas/charon" >> "$GITHUB_ENV"
+        echo "AENEAS=$RUNNER_TEMP/aeneas/aeneas" >> "$GITHUB_ENV"
+    - name: Regenerate Lean files
+      run: just gen-proofs
+    - name: Check generated Lean files are up to date
+      uses: tj-actions/verify-changed-files@a1c6acee9df209257a246f2cc6ae8cb6581c1edf # v20.0.4
+      with:
+        files: proofs/PackedPtr/Code/**
+        fail-if-changed: true
+        fail-message: Generated Lean files are out of date. Run 'just gen-proofs' and commit the result.
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: leanprover/lean-action@v1
+      with:
+        lake-package-directory: proofs
+        use-mathlib-cache: true
+        build-args: --wfail
