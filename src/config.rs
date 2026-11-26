@@ -26,10 +26,10 @@ mod private {
 ///
 /// There are 2 types of `PtrCfg`s that are available for all platforms:
 /// * [`None`]: No data can be packed into the pointer.
-/// This configuration will always fail when packing data into a pointer.
+///   This configuration will always fail when packing data into a pointer.
 /// * [`AlignOnly`]: Only the alignment of the pointer can be packed into the pointer.
-/// This configuration will use the alignment of a pointer to determine how many bits can be packed
-/// into the LSBs of the pointer.
+///   This configuration will use the alignment of a pointer to determine how many bits can be packed
+///   into the LSBs of the pointer.
 ///
 /// A pointer can pack data into 2 places in a pointer: the LSB bits & the MSB bits.
 ///
@@ -100,7 +100,6 @@ macro_rules! ptr_cfg {
         pub struct $cfg;
         impl private::Sealed for $cfg {}
         impl PtrCfg for $cfg {
-            #[must_use]
             fn lsb_bits<T>() -> usize {
                 if $align {
                     align_of::<T>().trailing_zeros() as usize
@@ -108,7 +107,6 @@ macro_rules! ptr_cfg {
                     0
                 }
             }
-            #[must_use]
             fn msb_bits() -> usize {
                 $msb
             }

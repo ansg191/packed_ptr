@@ -37,23 +37,30 @@ pub unsafe trait Packable: Copy {
 }
 
 macro_rules! impl_int {
-    ($($t:ty),*) => {
+    ($($t:ty => $u:ty),*) => {
         $(
+            // Casts are intentional
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_possible_wrap
+            )]
             unsafe impl Packable for $t {
                 fn pack(self) -> usize {
-                    self as usize
+                    self as $u as usize
                 }
                 unsafe fn unpack(value: usize) -> Self {
-                    value as $t
+                    value as $u as $t
                 }
             }
         )*
     };
 }
 
-impl_int!(u8, u16, u32, usize, i8, i16, i32, isize);
+impl_int!(u8 => u8, u16 => u16, u32 => u32, usize => usize);
+impl_int!(i8 => u8, i16 => u16, i32 => u32, isize => usize);
 #[cfg(target_pointer_width = "64")]
-impl_int!(u64, i64);
+impl_int!(u64 => u64, i64 => u64);
 
 unsafe impl Packable for () {
     fn pack(self) -> usize {
@@ -224,6 +231,69 @@ mod tests {
             assert_eq!(
                 18_446_744_073_709_551_615_u64,
                 Packable::unpack(18_446_744_073_709_551_615)
+            );
+        }
+    }
+
+    #[test]
+    fn signed_int() {
+        assert_eq!(<i8 as Packable>::MAX_BITS, 8);
+        assert_eq!(<i16 as Packable>::MAX_BITS, 16);
+        assert_eq!(<i32 as Packable>::MAX_BITS, 32);
+
+        // Negative values must stay within the lower `MAX_BITS` bits.
+        assert_eq!(0i8.pack(), 0);
+        assert_eq!(127i8.pack(), 0x7f);
+        assert_eq!((-1i8).pack(), 0xff);
+        assert_eq!(i8::MIN.pack(), 0x80);
+        assert_eq!((-1i16).pack(), 0xffff);
+        assert_eq!(i16::MIN.pack(), 0x8000);
+        assert_eq!((-1i32).pack(), 0xffff_ffff);
+        assert_eq!(i32::MIN.pack(), 0x8000_0000);
+        assert_eq!((-1isize).pack(), usize::MAX);
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!((-1i64).pack(), usize::MAX);
+
+        unsafe {
+            assert_eq!(-1i8, Packable::unpack(0xff));
+            assert_eq!(i8::MIN, Packable::unpack(0x80));
+            assert_eq!(127i8, Packable::unpack(0x7f));
+            assert_eq!(-1i16, Packable::unpack(0xffff));
+            assert_eq!(i16::MIN, Packable::unpack(0x8000));
+            assert_eq!(-1i32, Packable::unpack(0xffff_ffff));
+            assert_eq!(i32::MIN, Packable::unpack(0x8000_0000));
+            assert_eq!(-1isize, Packable::unpack(usize::MAX));
+            #[cfg(target_pointer_width = "64")]
+            assert_eq!(-1i64, Packable::unpack(usize::MAX));
+        }
+    }
+
+    #[test]
+    fn signed_int_composite() {
+        // Negative values must not clobber neighbouring fields.
+        assert_eq!((false, -1i8).pack(), 0x0ff);
+        assert_eq!((true, -1i8).pack(), 0x1ff);
+        assert_eq!((-1i8, false).pack(), 0x1fe);
+        assert_eq!([1i8, -1i8].pack(), 0x01ff);
+        assert_eq!([-1i8, 1i8].pack(), 0xff01);
+        assert_eq!(Some(-1i8).pack(), 0x1ff);
+        assert_eq!(Err::<u8, i8>(-1i8).pack(), 0x1fe);
+
+        unsafe {
+            assert_eq!((false, -1i8), Packable::unpack((false, -1i8).pack()));
+            assert_eq!((-1i8, false), Packable::unpack((-1i8, false).pack()));
+            assert_eq!(
+                [1i8, -1i8],
+                <[i8; 2] as Packable>::unpack([1i8, -1i8].pack())
+            );
+            assert_eq!(
+                [0i8, i8::MIN],
+                <[i8; 2] as Packable>::unpack([0i8, i8::MIN].pack())
+            );
+            assert_eq!(Some(-1i8), Packable::unpack(Some(-1i8).pack()));
+            assert_eq!(
+                Err::<u8, i8>(-1i8),
+                Packable::unpack(Err::<u8, i8>(-1i8).pack())
             );
         }
     }

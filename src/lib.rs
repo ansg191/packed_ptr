@@ -67,6 +67,9 @@
 //! assert_eq!(packed, ref1.data());
 //! ```
 
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod config;
 mod error;
 mod packable;
