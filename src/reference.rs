@@ -4,7 +4,7 @@ use core::{
     ops::Deref,
 };
 
-use crate::{config::PtrCfg, error::PackedPtrError, Packable, TypedPackedPtr};
+use crate::{Packable, TypedPackedPtr, config::PtrCfg, error::PackedPtrError};
 
 /// A type safe reference to a packed pointer.
 ///
@@ -46,7 +46,12 @@ impl<'a, T, C: PtrCfg, D: Packable> PackedRef<'a, T, C, D> {
     ///
     /// A new [`PackedRef`] with the given `ptr` and `data`.
     pub unsafe fn new_unchecked(ptr: &'a T, data: D) -> Self {
-        Self(TypedPackedPtr::new_unchecked(ptr, data), PhantomData)
+        Self(
+            // SAFETY: references are always valid pointers & the caller guarantees that the data
+            // fits in the pointer.
+            unsafe { TypedPackedPtr::new_unchecked(ptr, data) },
+            PhantomData,
+        )
     }
 
     /// Returns the reference to the data.

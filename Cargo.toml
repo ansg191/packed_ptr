@@ -6,8 +6,8 @@ version = "0.1.2"
 repository = "https://github.com/ansg191/packed_ptr"
 documentation = "https://docs.rs/packed_ptr"
 license = "MIT"
-edition = "2018"
-rust-version = "1.51.0"
+edition = "2024"
+rust-version = "1.85.0"
 readme = "README.md"
 keywords = ["tag", "pointer"]
 categories = ["data-structures", "no-std", "no-std::no-alloc"]
@@ -15,9 +15,6 @@ categories = ["data-structures", "no-std", "no-std::no-alloc"]
 [features]
 default = []
 std = []
-
-[dependencies]
-sptr = "0.3.2"
 
 [package.metadata.docs.rs]
 targets = [

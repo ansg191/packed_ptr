@@ -86,7 +86,8 @@ macro_rules! internal_tuple_unpack {
     ($value:ident, $t:ident) => {
         let $t = {
             let mask = (1 << <$t as Packable>::MAX_BITS) - 1;
-            let $t = <$t as Packable>::unpack($value & mask);
+            // SAFETY: The caller guarantees `$value` was returned by the tuple's `pack`.
+            let $t = unsafe { <$t as Packable>::unpack($value & mask) };
             $value >>= <$t as Packable>::MAX_BITS;
             $t
         };
@@ -95,7 +96,8 @@ macro_rules! internal_tuple_unpack {
         internal_tuple_unpack!($value, $($rest),*);
         let $t = {
             let mask = (1 << <$t as Packable>::MAX_BITS) - 1;
-            let $t = <$t as Packable>::unpack($value & mask);
+            // SAFETY: See above
+            let $t = unsafe { <$t as Packable>::unpack($value & mask) };
             $value >>= <$t as Packable>::MAX_BITS;
             $t
         };
@@ -150,10 +152,12 @@ unsafe impl<T: Packable, const N: usize> Packable for [T; N] {
         let mut array: MaybeUninit<[T; N]> = MaybeUninit::uninit();
         for i in 1..=N {
             let ptr = array.as_mut_ptr().cast::<T>();
-            ptr.add(N - i).write(T::unpack(value & mask));
+            // SAFETY: ptr points to valid memory & caller guarantees value was returned by pack
+            unsafe { ptr.add(N - i).write(T::unpack(value & mask)) }
             value >>= T::MAX_BITS;
         }
-        array.assume_init()
+        // SAFETY: array is initialized
+        unsafe { array.assume_init() }
     }
 }
 
@@ -168,7 +172,8 @@ unsafe impl<T: Packable> Packable for Option<T> {
         if value == 0 {
             None
         } else {
-            Some(T::unpack(value >> 1))
+            // SAFETY: caller guarantees value was returned by pack
+            Some(unsafe { T::unpack(value >> 1) })
         }
     }
 }
@@ -185,9 +190,11 @@ unsafe impl<T: Packable, E: Packable> Packable for Result<T, E> {
 
     unsafe fn unpack(value: usize) -> Self {
         if value & 1 == 0 {
-            Err(E::unpack(value >> 1))
+            // SAFETY: caller guarantees value was returned by pack
+            Err(unsafe { E::unpack(value >> 1) })
         } else {
-            Ok(T::unpack(value >> 1))
+            // SAFETY: caller guarantees value was returned by pack
+            Ok(unsafe { T::unpack(value >> 1) })
         }
     }
 }
