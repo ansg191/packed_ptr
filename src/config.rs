@@ -11,9 +11,7 @@
 //! For example on `x86_64`, there is [`Level4Paging`] & [`Level5Paging`] for 48-bit & 57-bit
 //! addresses respectively.
 
-use core::mem::{align_of, size_of};
-
-use sptr::Strict;
+use core::mem::align_of;
 
 mod private {
     pub trait Sealed {}
@@ -26,10 +24,10 @@ mod private {
 ///
 /// There are 2 types of `PtrCfg`s that are available for all platforms:
 /// * [`None`]: No data can be packed into the pointer.
-/// This configuration will always fail when packing data into a pointer.
+///   This configuration will always fail when packing data into a pointer.
 /// * [`AlignOnly`]: Only the alignment of the pointer can be packed into the pointer.
-/// This configuration will use the alignment of a pointer to determine how many bits can be packed
-/// into the LSBs of the pointer.
+///   This configuration will use the alignment of a pointer to determine how many bits can be packed
+///   into the LSBs of the pointer.
 ///
 /// A pointer can pack data into 2 places in a pointer: the LSB bits & the MSB bits.
 ///
@@ -67,30 +65,6 @@ pub trait PtrCfg: private::Sealed + Default {
     }
 }
 
-pub(crate) trait PtrCfgExt: PtrCfg {
-    fn lsb_bits_mask<T>() -> usize {
-        (1 << Self::lsb_bits::<T>()) - 1
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    fn msb_bits_mask() -> usize {
-        const PTR_SIZE: usize = size_of::<*const ()>() * 8;
-        (!0usize)
-            .checked_shl((PTR_SIZE - Self::msb_bits()) as u32)
-            .unwrap_or(0)
-    }
-
-    /// Checks if pointer would be modified by [`PackedPtr::new`](crate::PackedPtr::new).
-    /// If this returns false, it would be unsafe to create a `PackedPtr` with this
-    /// pointer & config.
-    fn check_ptr<T>(ptr: *const T) -> bool {
-        let mask = Self::msb_bits_mask() | Self::lsb_bits_mask::<T>();
-        Strict::addr(ptr) & mask == 0
-    }
-}
-
-impl<T: PtrCfg> PtrCfgExt for T {}
-
 macro_rules! ptr_cfg {
     (
         $(#[$outer:meta])*
@@ -100,7 +74,6 @@ macro_rules! ptr_cfg {
         pub struct $cfg;
         impl private::Sealed for $cfg {}
         impl PtrCfg for $cfg {
-            #[must_use]
             fn lsb_bits<T>() -> usize {
                 if $align {
                     align_of::<T>().trailing_zeros() as usize
@@ -108,7 +81,6 @@ macro_rules! ptr_cfg {
                     0
                 }
             }
-            #[must_use]
             fn msb_bits() -> usize {
                 $msb
             }
@@ -206,9 +178,6 @@ mod tests {
         assert_eq!(None::lsb_bits::<u32>(), 0);
         assert_eq!(None::msb_bits(), 0);
         assert_eq!(None::bits::<u32>(), 0);
-        assert_eq!(None::lsb_bits_mask::<u32>(), 0x00);
-        assert_eq!(None::msb_bits_mask(), 0x00);
-        assert!(None::check_ptr::<u32>(sptr::invalid(0xffff_ffff)));
     }
 
     #[test]
@@ -218,12 +187,6 @@ mod tests {
         assert_eq!(AlignOnly::lsb_bits::<u8>(), 0);
         assert_eq!(AlignOnly::msb_bits(), 0);
         assert_eq!(AlignOnly::bits::<u32>(), 2);
-        assert_eq!(AlignOnly::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(AlignOnly::lsb_bits_mask::<u64>(), 0x07);
-        assert_eq!(AlignOnly::lsb_bits_mask::<u8>(), 0x00);
-        assert_eq!(AlignOnly::msb_bits_mask(), 0x00);
-        assert!(AlignOnly::check_ptr::<u32>(sptr::invalid(0xffff_fffc)));
-        assert!(!AlignOnly::check_ptr::<u32>(sptr::invalid(0xffff_ffff)));
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -232,14 +195,6 @@ mod tests {
         assert_eq!(Level5Paging::lsb_bits::<u32>(), 2);
         assert_eq!(Level5Paging::msb_bits(), 7);
         assert_eq!(Level5Paging::bits::<u32>(), 9);
-        assert_eq!(Level5Paging::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Level5Paging::msb_bits_mask(), 0xfe00_0000_0000_0000);
-        assert!(Level5Paging::check_ptr::<u32>(sptr::invalid(
-            0x01ff_ffff_ffff_fffc
-        )));
-        assert!(!Level5Paging::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -248,14 +203,6 @@ mod tests {
         assert_eq!(Level4Paging::lsb_bits::<u32>(), 2);
         assert_eq!(Level4Paging::msb_bits(), 16);
         assert_eq!(Level4Paging::bits::<u32>(), 18);
-        assert_eq!(Level4Paging::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Level4Paging::msb_bits_mask(), 0xffff_0000_0000_0000);
-        assert!(Level4Paging::check_ptr::<u32>(sptr::invalid(
-            0x0000_ffff_ffff_fffc
-        )));
-        assert!(!Level4Paging::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -264,10 +211,6 @@ mod tests {
         assert_eq!(Lva::lsb_bits::<u32>(), 2);
         assert_eq!(Lva::msb_bits(), 12);
         assert_eq!(Lva::bits::<u32>(), 14);
-        assert_eq!(Lva::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Lva::msb_bits_mask(), 0xfff0_0000_0000_0000);
-        assert!(Lva::check_ptr::<u32>(sptr::invalid(0x000f_ffff_ffff_fffc)));
-        assert!(!Lva::check_ptr::<u32>(sptr::invalid(0xffff_ffff_ffff_ffff)));
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -276,14 +219,6 @@ mod tests {
         assert_eq!(Level4Paging::lsb_bits::<u32>(), 2);
         assert_eq!(Level4Paging::msb_bits(), 16);
         assert_eq!(Level4Paging::bits::<u32>(), 18);
-        assert_eq!(Level4Paging::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Level4Paging::msb_bits_mask(), 0xffff_0000_0000_0000);
-        assert!(Level4Paging::check_ptr::<u32>(sptr::invalid(
-            0x0000_ffff_ffff_fffc
-        )));
-        assert!(!Level4Paging::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -292,14 +227,6 @@ mod tests {
         assert_eq!(Level3Paging::lsb_bits::<u32>(), 2);
         assert_eq!(Level3Paging::msb_bits(), 25);
         assert_eq!(Level3Paging::bits::<u32>(), 27);
-        assert_eq!(Level3Paging::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Level3Paging::msb_bits_mask(), 0xffff_ff80_0000_0000);
-        assert!(Level3Paging::check_ptr::<u32>(sptr::invalid(
-            0x0000_007f_ffff_fffc
-        )));
-        assert!(!Level3Paging::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "riscv64")]
@@ -308,12 +235,6 @@ mod tests {
         assert_eq!(Sv57::lsb_bits::<u32>(), 2);
         assert_eq!(Sv57::msb_bits(), 7);
         assert_eq!(Sv57::bits::<u32>(), 9);
-        assert_eq!(Sv57::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Sv57::msb_bits_mask(), 0xfe00_0000_0000_0000);
-        assert!(Sv57::check_ptr::<u32>(sptr::invalid(0x01ff_ffff_ffff_fffc)));
-        assert!(!Sv57::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "riscv64")]
@@ -322,12 +243,6 @@ mod tests {
         assert_eq!(Sv48::lsb_bits::<u32>(), 2);
         assert_eq!(Sv48::msb_bits(), 16);
         assert_eq!(Sv48::bits::<u32>(), 18);
-        assert_eq!(Sv48::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Sv48::msb_bits_mask(), 0xffff_0000_0000_0000);
-        assert!(Sv48::check_ptr::<u32>(sptr::invalid(0x0000_ffff_ffff_fffc)));
-        assert!(!Sv48::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 
     #[cfg(target_arch = "riscv64")]
@@ -336,11 +251,5 @@ mod tests {
         assert_eq!(Sv39::lsb_bits::<u32>(), 2);
         assert_eq!(Sv39::msb_bits(), 25);
         assert_eq!(Sv39::bits::<u32>(), 27);
-        assert_eq!(Sv39::lsb_bits_mask::<u32>(), 0x03);
-        assert_eq!(Sv39::msb_bits_mask(), 0xffff_ff80_0000_0000);
-        assert!(Sv39::check_ptr::<u32>(sptr::invalid(0x0000_007f_ffff_fffc)));
-        assert!(!Sv39::check_ptr::<u32>(sptr::invalid(
-            0xffff_ffff_ffff_ffff
-        )));
     }
 }

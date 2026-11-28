@@ -1,13 +1,6 @@
-use core::{marker::PhantomData, mem::size_of};
+use core::marker::PhantomData;
 
-use sptr::Strict;
-
-use crate::{
-    config::{PtrCfg, PtrCfgExt},
-    PackedPtrError,
-};
-
-const PTR_SIZE_BITS: usize = size_of::<*const ()>() * 8;
+use crate::{PackedPtrError, bits, config::PtrCfg};
 
 /// A packed pointer that wraps a raw pointer to a specified type with additional data packed into
 /// the pointer itself.
@@ -76,20 +69,9 @@ impl<T, C: PtrCfg> PackedPtr<T, C> {
     /// ```
     #[allow(clippy::not_unsafe_ptr_arg_deref, clippy::needless_pass_by_value)]
     pub fn new(ptr: *const T, data: usize, _cfg: C) -> Result<Self, PackedPtrError> {
-        if Strict::addr(ptr) & C::lsb_bits_mask::<T>() != 0 {
-            return Err(PackedPtrError::UnalignedAddress);
-        }
+        bits::check(ptr.addr(), data, C::msb_bits(), C::lsb_bits::<T>())?;
 
-        if data >= 1 << Self::bits() {
-            return Err(PackedPtrError::DataOverflow);
-        }
-
-        if !C::check_ptr(ptr) {
-            return Err(PackedPtrError::UnsafeConfig);
-        }
-
-        // SAFETY: We just checked that the address is aligned and that the data will fit in the
-        // pointer.
+        // SAFETY: check ensures the ptr, data, & cfg are valid
         Ok(unsafe { Self::new_unchecked(ptr, data) })
     }
 
@@ -118,11 +100,8 @@ impl<T, C: PtrCfg> PackedPtr<T, C> {
     /// Passing a pointer that is not compatible with the configuration will cause the pointer to be
     /// corrupted, leading to UB.
     pub unsafe fn new_unchecked(ptr: *const T, data: usize) -> Self {
-        let trunc_data = data & ((1 << Self::bits()) - 1);
-        let upper = (trunc_data << (PTR_SIZE_BITS - Self::bits())) & C::msb_bits_mask();
-        let lower = trunc_data & C::lsb_bits_mask::<T>();
-
-        let ptr = Strict::map_addr(ptr, |addr| addr | upper | lower);
+        let ptr =
+            ptr.map_addr(|addr| bits::pack_addr(addr, data, C::msb_bits(), C::lsb_bits::<T>()));
         Self(ptr, PhantomData)
     }
 
@@ -157,9 +136,8 @@ impl<T, C: PtrCfg> PackedPtr<T, C> {
     /// ```
     #[must_use]
     pub fn ptr(self) -> *const T {
-        Strict::map_addr(self.0, |addr| {
-            addr & !C::msb_bits_mask() & !C::lsb_bits_mask::<T>()
-        })
+        self.0
+            .map_addr(|addr| bits::unpack_addr(addr, C::msb_bits(), C::lsb_bits::<T>()))
     }
 
     /// Extracts the data from the packed pointer.
@@ -182,10 +160,7 @@ impl<T, C: PtrCfg> PackedPtr<T, C> {
     /// ```
     #[must_use]
     pub fn data(self) -> usize {
-        let addr = Strict::addr(self.0);
-        let upper = addr & C::msb_bits_mask();
-        let lower = addr & C::lsb_bits_mask::<T>();
-        (upper >> (PTR_SIZE_BITS - Self::bits())) | lower
+        bits::unpack_data(self.0.addr(), C::msb_bits(), C::lsb_bits::<T>())
     }
 }
 
@@ -236,7 +211,7 @@ mod tests {
         let data = 0xdead_beef_u32;
         let packed = 2;
 
-        let ptr = PackedPtr::new(&data, packed, AlignOnly).unwrap();
+        let ptr = PackedPtr::new(&raw const data, packed, AlignOnly).unwrap();
 
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
@@ -246,25 +221,37 @@ mod tests {
     fn new() {
         let data = 0xdead_beef_u32;
 
-        let overflow = PackedPtr::new(&data, 4, AlignOnly);
+        let overflow = PackedPtr::new(&raw const data, 4, AlignOnly);
         assert!(matches!(overflow, Err(PackedPtrError::DataOverflow)));
 
-        let ok = PackedPtr::new(&data, 3, AlignOnly);
+        let ok = PackedPtr::new(&raw const data, 3, AlignOnly);
         assert!(ok.is_ok());
     }
 
     #[test]
     fn eq() {
         let data = 0xdead_beef_u32;
-        let ptr = PackedPtr::new(&data, 2, AlignOnly).unwrap();
-        let ptr2 = PackedPtr::new(&data, 2, AlignOnly).unwrap();
+        let ptr = PackedPtr::new(&raw const data, 2, AlignOnly).unwrap();
+        let ptr2 = PackedPtr::new(&raw const data, 2, AlignOnly).unwrap();
         assert_eq!(ptr, ptr2);
 
-        let ptr3 = PackedPtr::new(&data, 1, AlignOnly).unwrap();
+        let ptr3 = PackedPtr::new(&raw const data, 1, AlignOnly).unwrap();
         assert_ne!(ptr, ptr3);
 
         let data2 = 0xdead_beef_u32;
-        let ptr4 = PackedPtr::new(&data2, 2, AlignOnly).unwrap();
+        let ptr4 = PackedPtr::new(&raw const data2, 2, AlignOnly).unwrap();
         assert_ne!(ptr, ptr4);
+    }
+
+    #[test]
+    fn none() {
+        let data = 0xdead_beef_u32;
+
+        let ptr = PackedPtr::new(&raw const data, 0, crate::config::None).unwrap();
+        assert_eq!(data, unsafe { *ptr.ptr() });
+        assert_eq!(0, ptr.data());
+
+        let overflow = PackedPtr::new(&raw const data, 4, crate::config::None);
+        assert!(matches!(overflow, Err(PackedPtrError::DataOverflow)));
     }
 }

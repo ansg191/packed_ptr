@@ -5,7 +5,7 @@ use core::{
     marker::PhantomData,
 };
 
-use crate::{config::PtrCfg, error::PackedPtrError, Packable, PackedPtr};
+use crate::{Packable, PackedPtr, config::PtrCfg, error::PackedPtrError};
 
 /// A [`PackedPtr`] with a type-safe packed data value.
 ///
@@ -101,7 +101,8 @@ impl<T, C: PtrCfg, D: Packable> TypedPackedPtr<T, C, D> {
     /// A new instance of `Self` with the given `ptr` and `data`.
     pub unsafe fn new_unchecked(ptr: *const T, data: D) -> Self {
         let data = data.pack();
-        let ptr = PackedPtr::new_unchecked(ptr, data);
+        // SAFETY: The caller guarantees that the data fits in the pointer & the pointer is valid.
+        let ptr = unsafe { PackedPtr::new_unchecked(ptr, data) };
         Self(ptr, PhantomData)
     }
 
@@ -205,7 +206,7 @@ mod tests {
         let data = 0xdead_beef_u32;
         let packed = (true, false);
 
-        let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
+        let ptr = TypedPackedPtr::new(&raw const data, packed, AlignOnly).unwrap();
 
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
@@ -216,7 +217,7 @@ mod tests {
         let data = 0xdead_beef_u32;
 
         let packed = 5u32;
-        let overflow = TypedPackedPtr::new(&data, packed, AlignOnly);
+        let overflow = TypedPackedPtr::new(&raw const data, packed, AlignOnly);
         assert!(overflow.is_err());
         assert!(matches!(
             overflow.unwrap_err(),
@@ -224,7 +225,7 @@ mod tests {
         ));
 
         let packed = true;
-        let ok = TypedPackedPtr::new(&data, packed, AlignOnly);
+        let ok = TypedPackedPtr::new(&raw const data, packed, AlignOnly);
         assert!(ok.is_ok());
     }
 
@@ -232,7 +233,7 @@ mod tests {
     fn array() {
         let data = 0xdead_beef_u32;
         let packed = [true, false];
-        let ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
+        let ptr = TypedPackedPtr::new(&raw const data, packed, AlignOnly).unwrap();
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
     }
@@ -241,7 +242,7 @@ mod tests {
     fn set_data() {
         let data = 0xdead_beef_u32;
         let packed = (true, false);
-        let mut ptr = TypedPackedPtr::new(&data, packed, AlignOnly).unwrap();
+        let mut ptr = TypedPackedPtr::new(&raw const data, packed, AlignOnly).unwrap();
         assert_eq!(data, unsafe { *ptr.ptr() });
         assert_eq!(packed, ptr.data());
 
